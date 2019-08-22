@@ -365,7 +365,8 @@ def _create_hie_bios(hs, ctx, repl_info):
     args.add_all(repl_info.load_info.compiler_flags)
     args.add_all(hs.toolchain.repl_ghci_args)
     args.add_all(repl_info.load_info.repl_ghci_args)
-    args.add_all(ctx.attr.repl_ghci_args)
+    if hasattr(ctx.attr, "repl_ghci_args"):
+        args.add_all(ctx.attr.repl_ghci_args)
 
     args_file = ctx.actions.declare_file(ctx.label.name + "@hie_bios.args")
     args.set_param_file_format("multiline")
@@ -396,15 +397,29 @@ def _haskell_repl_aspect_impl(target, ctx):
         deps_infos = []
     collect_info = _merge_HaskellReplCollectInfo([target_info] + deps_infos)
 
+    from_source = [parse_pattern(ctx, "//...")]
+    from_binary = []
+    repl_info = _create_HaskellReplInfo(from_source, from_binary, collect_info)
+
     # This aspect currently does not generate an executable REPL script by
     # itself. This could be extended in future. Note, to that end it's
     # necessary to construct a Haskell context without `ctx.attr.name`.
 
-    return [collect_info]
+    attrs = {"name": ctx.label.name}
+    if hasattr(ctx.attr, "deps"):
+        attrs["deps"] = ctx.attr.deps
+    if hasattr(ctx.attr, "exports"):
+        attrs["deps"] = ctx.attr.exports
+    if hasattr(ctx.attr, "src_strip_prefix"):
+        attrs["deps"] = ctx.attr.src_strip_prefix
+    hs = haskell_context(ctx, struct(**attrs))
+
+    return [collect_info] + _create_hie_bios(hs, ctx, repl_info)
 
 haskell_repl_aspect = aspect(
     implementation = _haskell_repl_aspect_impl,
     attr_aspects = ["deps"],
+    toolchains = ["@rules_haskell//haskell:toolchain"],
 )
 """
 Haskell REPL aspect.
