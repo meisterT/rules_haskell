@@ -6,6 +6,7 @@ load("@bazel_skylib//lib:shell.bzl", "shell")
 load("@rules_haskell//haskell:private/context.bzl", "haskell_context", "render_env")
 load(
     "@rules_haskell//haskell:private/path_utils.bzl",
+    "get_dirname",
     "link_libraries",
     "match_label",
     "parse_pattern",
@@ -319,6 +320,67 @@ def _create_repl(hs, ctx, repl_info, output):
         ),
     )]
 
+def _create_hie_bios(hs, ctx, repl_info):
+    args = ctx.actions.args()
+
+    # Load C library dependencies
+    cc_info = cc_common.merge_cc_infos(cc_infos = [
+        repl_info.load_info.cc_info,
+        repl_info.dep_info.cc_info,
+    ])
+    (ghci_extra_libs, ghc_env) = get_ghci_extra_libs(hs, cc_info)
+    link_libraries(ghci_extra_libs, args)
+
+    # Load built dependencies (-package-id, -package-db)
+    args.add("-hide-all-packages")
+    args.add_all(
+        repl_info.dep_info.package_ids,
+        before_each = "-package-id",
+    )
+    args.add_all(
+        repl_info.dep_info.package_databases,
+        map_each = get_dirname,
+        before_each = "-package-db",
+    )
+
+    # Add import directories
+    args.add_all(
+        repl_info.load_info.import_dirs,
+        map_each = paths.normalize,  # Replaces "" by "."
+        format_each = "-i%s",
+    )
+
+    # Extra arguments.
+    # `compiler flags` is the default set of arguments for the repl,
+    # augmented by `repl_ghci_args`.
+    # The ordering is important, first compiler flags (from toolchain
+    # and local rule), then from `repl_ghci_args`. This way the more
+    # specific arguments are listed last, and then have more priority in
+    # GHC.
+    # Note that most flags for GHCI do have their negative value, so a
+    # negative flag in `repl_ghci_args` can disable a positive flag set
+    # in `compiler_flags`, such as `-XNoOverloadedStrings` will disable
+    # `-XOverloadedStrings`.
+    args.add_all(hs.toolchain.compiler_flags)
+    args.add_all(repl_info.load_info.compiler_flags)
+    args.add_all(hs.toolchain.repl_ghci_args)
+    args.add_all(repl_info.load_info.repl_ghci_args)
+    args.add_all(ctx.attr.repl_ghci_args)
+
+    args_file = ctx.actions.declare_file(ctx.label.name + "@hie_bios.args")
+    args.set_param_file_format("multiline")
+    ctx.actions.write(args_file, args)
+
+    env_file = ctx.actions.declare_file(ctx.label.name + "@hie_bios.env")
+    ctx.actions.write(env_file, "".join([
+        "%s %s\n" % kv
+        for kv in ghc_env.items()
+    ]))
+
+    return [OutputGroupInfo(
+        hie_bios = [args_file, env_file],
+    )]
+
 def _haskell_repl_aspect_impl(target, ctx):
     if HaskellInfo not in target:
         return []
@@ -361,7 +423,13 @@ def _haskell_repl_impl(ctx):
     from_binary = [parse_pattern(ctx, pat) for pat in ctx.attr.experimental_from_binary]
     repl_info = _create_HaskellReplInfo(from_source, from_binary, collect_info)
     hs = haskell_context(ctx)
-    return _create_repl(hs, ctx, repl_info, ctx.outputs.repl)
+
+    hie_bios_group = _create_hie_bios(hs, ctx, repl_info)
+
+    return (
+        _create_repl(hs, ctx, repl_info, ctx.outputs.repl) +
+        _create_hie_bios(hs, ctx, repl_info)
+    )
 
 haskell_repl = rule(
     implementation = _haskell_repl_impl,
