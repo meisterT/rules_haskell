@@ -8,6 +8,7 @@ load(
     "@rules_haskell//haskell:private/path_utils.bzl",
     "get_dirname",
     "link_libraries",
+    "ln",
     "match_label",
     "parse_pattern",
     "target_unique_name",
@@ -368,12 +369,26 @@ def _create_hie_bios(hs, ctx, repl_info):
     if hasattr(ctx.attr, "repl_ghci_args"):
         args.add_all(ctx.attr.repl_ghci_args)
 
+    # Required files: generated sources, package databases, libraries, etc.
+    # Pass them as extra_inputs to ln to force Bazel to build them so that the
+    # IDE can find them.
+    extra_inputs = depset(transitive = [
+        repl_info.load_info.source_files,
+        repl_info.dep_info.package_databases,
+        ghci_extra_libs,
+        depset([hs.toolchain.locale_archive] if hs.toolchain.locale_archive else []),
+    ])
+
     args_file = ctx.actions.declare_file(ctx.label.name + "@hie_bios.args")
+    args_file_internal = ctx.actions.declare_file(ctx.label.name + "@hie_bios.args.internal")
+    ln(hs, args_file_internal, args_file, extra_inputs = extra_inputs)
     args.set_param_file_format("multiline")
-    ctx.actions.write(args_file, args)
+    ctx.actions.write(args_file_internal, args)
 
     env_file = ctx.actions.declare_file(ctx.label.name + "@hie_bios.env")
-    ctx.actions.write(env_file, "".join([
+    env_file_internal = ctx.actions.declare_file(ctx.label.name + "@hie_bios.env.internal")
+    ln(hs, env_file_internal, env_file, extra_inputs = extra_inputs)
+    ctx.actions.write(env_file_internal, "".join([
         "%s %s\n" % kv
         for kv in ghc_env.items()
     ]))
