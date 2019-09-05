@@ -134,10 +134,11 @@ for conf in glob.glob(os.path.join(topdir, "package.conf.d", "*.conf")):
     # output a SYMLINK information for the parent process
 
     # first, try to get a path within the package
+    haddock_html = None
+
     # We check if the file exists because cabal will unconditionally
     # generate the database entry even if no haddock was generated.
-    haddock_html = None
-    if pkg.haddock_html:
+    if pkg.haddock_html and os.path.exists(pkg.haddock_html):
         haddock_html = path_to_label(pkg.haddock_html, pkg.pkgroot)
         if not haddock_html:
             haddock_html = os.path.join("haddock", "html", pkg.name)
@@ -147,6 +148,11 @@ for conf in glob.glob(os.path.join(topdir, "package.conf.d", "*.conf")):
     interface_id = 0
     haddock_interfaces = []
     for interface_path in pkg.haddock_interfaces:
+        # We check if the file exists because cabal will unconditionally
+        # generate the database entry even if no haddock was generated.
+        if not os.path.exists(interface_path):
+            continue
+
         interface = path_to_label(interface_path, pkg.pkgroot)
         if not interface:
             interface = os.path.join(
