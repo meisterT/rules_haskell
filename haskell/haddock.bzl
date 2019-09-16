@@ -60,13 +60,15 @@ def _haskell_doc_aspect_impl(target, ctx):
         "--hyperlinked-source",
     ])
 
-    transitive_haddocks = {}
-    transitive_html = {}
+    haddock_info = generate_unified_haddock_info(
+        this_package_id=package_id,
+        this_package_haddock=haddock_file,
+        this_package_html=html_dir,
+        deps=ctx.rule.attr.deps,
+    )
 
-    for dep in ctx.rule.attr.deps:
-        if HaddockInfo in dep:
-            transitive_haddocks.update(dep[HaddockInfo].transitive_haddocks)
-            transitive_html.update(dep[HaddockInfo].transitive_html)
+    transitive_haddocks=haddock_info.transitive_haddocks
+    transitive_html=haddock_info.transitive_html
 
     for pid in transitive_haddocks:
         for interface in transitive_haddocks[pid]:
@@ -168,6 +170,29 @@ haskell_doc_aspect = aspect(
 
 def _dirname(file):
     return file.dirname
+
+def generate_unified_haddock_info(this_package_id, this_package_haddock, this_package_html, deps):
+    """Collapse dependencies into a single `HaddockInfo`.
+
+    Returns:
+      HaddockInfo: Unified information about this package and all its dependencies.
+    """
+    haddock_dict = {}
+    html_dict = {}
+
+    for dep in deps:
+        if HaddockInfo in dep:
+            html_dict.update(dep[HaddockInfo].transitive_html)
+            haddock_dict.update(dep[HaddockInfo].transitive_haddocks)
+
+    html_dict[this_package_id] = this_package_html
+    haddock_dict[this_package_id] = [this_package_haddock]
+
+    return HaddockInfo(
+        package_id=this_package_id, 
+        transitive_html=html_dict,
+        transitive_haddocks=haddock_dict,
+    )
 
 def _haskell_doc_rule_impl(ctx):
     hs = haskell_context(ctx)

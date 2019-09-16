@@ -35,6 +35,8 @@ libdir = os.path.join(pkgroot, "iface")
 dynlibdir = os.path.join(pkgroot, "lib")
 bindir = os.path.join(pkgroot, "bin")
 datadir = os.path.join(pkgroot, "data")
+haddockdir = os.path.join(pkgroot, "haddock")
+htmldir = os.path.join(pkgroot, "haddock_html")
 package_database = os.path.join(pkgroot, "package.conf.d")
 
 ghc_pkg = "%{ghc_pkg}"
@@ -80,6 +82,8 @@ with tempfile.TemporaryDirectory() as distdir:
         "--libsubdir=", \
         "--bindir=" + bindir, \
         "--datadir=" + datadir, \
+        "--haddockdir=" + haddockdir, \
+        "--htmldir=" + htmldir, \
         "--package-db=clear", \
         "--package-db=global", \
         ] + \
@@ -89,6 +93,7 @@ with tempfile.TemporaryDirectory() as distdir:
         [ "--package-db=" + package_database ], # This arg must come last.
         )
     run([runghc, setup, "build", "--verbose=0", "--builddir=" + distdir])
+    run([runghc, setup, "haddock", "--verbose=0", "--builddir=" + distdir])
     run([runghc, setup, "install", "--verbose=0", "--builddir=" + distdir])
     os.chdir(old_cwd)
 
@@ -126,3 +131,10 @@ if libraries != [] and os.path.isfile(package_conf_file):
     os.remove(package_conf_file)
     os.rename(tmp_package_conf_file, package_conf_file)
     recache_db()
+
+# The haddock outputs might not be created, in which case we generate dummy
+# stuff to make bazel happy
+os.makedirs(htmldir, exist_ok=True)
+os.makedirs(haddockdir, exist_ok=True)
+# XXX Is there a better way to create an empty file?
+open(os.path.join(haddockdir, name + ".haddock"), 'a').close()
