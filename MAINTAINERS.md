@@ -31,8 +31,9 @@
     - copy the changelog section into the description
     - release
 - [ ] Push `rules_haskell` version in start script to new release tag,
-  test it in a temporary directory, create PR against master, publish
-  start script.
+  test it in a temporary directory, create PR against master
+  - [ ] publish start script by merging the commit into the `release`
+        branch, which then triggers netlify
 - [ ] Announce the new version (on Twitter)
 
 
