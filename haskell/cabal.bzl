@@ -94,7 +94,7 @@ def _prepare_cabal_inputs(hs, cc, dep_info, cc_info, package_id, tool_inputs, to
 
     (ghci_extra_libs, env) = get_ghci_extra_libs(hs, cc_info)
     env.update(**hs.env)
-    env["PATH"] = _make_path(hs, tool_inputs)
+    env["EXTRA_PATH"] = _make_path(hs, tool_inputs)
     if hs.toolchain.is_darwin:
         env["SDKROOT"] = "macosx"  # See haskell/private/actions/link.bzl
 
